@@ -1,3 +1,4 @@
+import { ref, uploadBytesResumable, getDownloadURL } from "@firebase/storage";
 import { auth, Provider, storage } from "../firebase";
 import db from "../firebase";
 
@@ -17,7 +18,7 @@ export const setLoading = (state) => ({
   // status: status,
 });
 
-export function getArticles(payload, id) {
+export function getArticles(payload) {
   return {
     type: GET_ARTICLES,
     payload: payload,
@@ -62,14 +63,15 @@ export function postArticleAPI(payload) {
     dispatch(setLoading(true));
 
     if (payload.image !== "") {
-      const upload = storage
-        .ref("images/${payload.image.name}")
-        .put(payload.image);
+      const storageRef = ref(storage, "images/${payload.image.name}");
+      const upload = uploadBytesResumable(storageRef, payload.image);
+
       upload.on(
         "state_changed",
         (snapshot) => {
-          const progress =
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          const progress = Math.round(
+            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          );
 
           console.log("Progress: ${progress}%");
           if (snapshot.state === "RUN") {
@@ -78,11 +80,13 @@ export function postArticleAPI(payload) {
         },
         (error) => console.log(error.code),
         async () => {
-          const downloadURL = await upload.snapshot.ref.getDownloadURL();
+          const downloadURL = await getDownloadURL(upload.snapshot.ref).then(
+            (url) => console.log(url)
+          );
           db.collection("article").add({
             actor: {
               description: payload.user.email,
-              title: payload.user.displayname,
+              title: payload.user.displayName,
               date: payload.timestamp,
               image: payload.user.photoURL,
             },
@@ -98,7 +102,7 @@ export function postArticleAPI(payload) {
       db.collection("articles").add({
         actor: {
           description: payload.user.email,
-          title: payload.user.displayname,
+          title: payload.user.displayName,
           date: payload.timestamp,
           image: payload.user.photoURL,
         },
